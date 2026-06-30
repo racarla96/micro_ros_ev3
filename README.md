@@ -272,12 +272,20 @@ docker run -it --rm --net=host \
 
 ## Step 7 — Run on the EV3
 
+### From an SSH or serial terminal
+
 ```bash
 ssh robot@ev3dev.local
 ./micro_ros_publisher_udp
 ```
 
-Verify the topic from a ROS 2 terminal on the PC:
+### From the EV3 screen
+
+If the binary has executable permissions (set in Step 5), it can be launched
+directly from the ev3dev Buster file manager on the EV3 screen without needing
+a PC terminal open.
+
+### Verify on the PC
 
 ```bash
 ros2 topic echo /ev3_topic
