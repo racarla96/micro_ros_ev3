@@ -323,10 +323,3 @@ gdbserver :1234 ./my_node
 arm-linux-gnueabi-gdb build/.../my_node
 (gdb) target remote ev3dev.local:1234
 ```
-
-### Installing extra libraries
-
-```bash
-docker run --rm -it ev3cc bash
-sudo apt-get install libsomething-dev:armel
-```
