@@ -7,13 +7,17 @@ micro-ROS nodes on the EV3 brick and communicate with a ROS 2 system over serial
 
 ## System overview
 
-```
-[PC / Host]                              [EV3 / ev3dev Buster]
-┌──────────────────────┐                 ┌──────────────────────┐
-│  ROS 2 (Jazzy)       │                 │  micro-ROS app       │
-│  micro-ROS agent     │ ←─ Serial/UDP ─→│  linked against      │
-│  (Docker)            │                 │  libmicroros.a       │
-└──────────────────────┘                 └──────────────────────┘
+```mermaid
+graph LR
+    subgraph PC["PC / Host"]
+        ROS2["ROS 2 (Jazzy)"]
+        Agent["micro-ROS agent\n(Docker)"]
+        ROS2 <--> Agent
+    end
+    subgraph EV3["EV3 / ev3dev Buster"]
+        App["micro-ROS app\n(linked against libmicroros.a)"]
+    end
+    Agent <-->|"Serial\nor UDP"| App
 ```
 
 ## Repository structure
@@ -233,10 +237,16 @@ docker run --rm -it \
 
 ## Step 5 — Copy the binary to the EV3
 
+Default ev3dev Buster credentials: **user** `robot`, **password** `maker`.
+
 ```bash
+# Copy and set executable permissions in one step
 scp build/publisher_udp/micro_ros_publisher_udp robot@ev3dev.local:~
-# adjust path to the example you built
+ssh robot@ev3dev.local chmod +x micro_ros_publisher_udp
 ```
+
+The binary can then be launched directly from the EV3 screen using the
+ev3dev Buster file manager, or from an SSH/serial terminal.
 
 ---
 
