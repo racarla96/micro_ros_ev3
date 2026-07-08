@@ -126,8 +126,8 @@ docker tag ev3dev/debian-stretch-cross ev3cc
 
 > Reference: https://www.ev3dev.org/docs/tutorials/using-docker-to-cross-compile/
 
-The image does not include CMake by default. The build commands below install it
-automatically inside the container at build time.
+CMake (3.7.2) is already included in the image, so no extra setup is needed before
+building.
 
 ---
 
@@ -164,8 +164,7 @@ Edit `examples/micro_ros_publisher_serial/main.c` and set the serial device
 docker run --rm -it \
   -v $(pwd):/src \
   -w /src ev3cc bash -c \
-  "sudo apt-get install -y cmake > /dev/null && \
-   mkdir -p build/publisher_serial && cd build/publisher_serial && \
+  "mkdir -p build/publisher_serial && cd build/publisher_serial && \
    cmake ../../examples/micro_ros_publisher_serial -DCMAKE_TOOLCHAIN_FILE=../../ev3_toolchain.cmake && \
    cmake --build ."
 ```
@@ -178,8 +177,7 @@ Edit `agent_ip` in `examples/micro_ros_publisher_udp/main.c`, then:
 docker run --rm -it \
   -v $(pwd):/src \
   -w /src ev3cc bash -c \
-  "sudo apt-get install -y cmake > /dev/null && \
-   mkdir -p build/publisher_udp && cd build/publisher_udp && \
+  "mkdir -p build/publisher_udp && cd build/publisher_udp && \
    cmake ../../examples/micro_ros_publisher_udp -DCMAKE_TOOLCHAIN_FILE=../../ev3_toolchain.cmake && \
    cmake --build ."
 ```
@@ -192,8 +190,7 @@ Subscribes to `ev3_topic` (std_msgs/Int32) and prints received values.
 docker run --rm -it \
   -v $(pwd):/src \
   -w /src ev3cc bash -c \
-  "sudo apt-get install -y cmake > /dev/null && \
-   mkdir -p build/subscriber && cd build/subscriber && \
+  "mkdir -p build/subscriber && cd build/subscriber && \
    cmake ../../examples/micro_ros_subscriber -DCMAKE_TOOLCHAIN_FILE=../../ev3_toolchain.cmake && \
    cmake --build ."
 ```
@@ -211,8 +208,7 @@ Exposes `/addtwoints` (example_interfaces/srv/AddTwoInts).
 docker run --rm -it \
   -v $(pwd):/src \
   -w /src ev3cc bash -c \
-  "sudo apt-get install -y cmake > /dev/null && \
-   mkdir -p build/service && cd build/service && \
+  "mkdir -p build/service && cd build/service && \
    cmake ../../examples/micro_ros_addtwoints_service -DCMAKE_TOOLCHAIN_FILE=../../ev3_toolchain.cmake && \
    cmake --build ."
 ```
@@ -230,8 +226,7 @@ Synchronises the EV3 clock with the agent and prints the current UTC time every 
 docker run --rm -it \
   -v $(pwd):/src \
   -w /src ev3cc bash -c \
-  "sudo apt-get install -y cmake > /dev/null && \
-   mkdir -p build/time_sync && cd build/time_sync && \
+  "mkdir -p build/time_sync && cd build/time_sync && \
    cmake ../../examples/micro_ros_time_sync -DCMAKE_TOOLCHAIN_FILE=../../ev3_toolchain.cmake && \
    cmake --build ."
 ```
