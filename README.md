@@ -1,6 +1,6 @@
 # micro_ros_ev3
 
-micro-ROS for LEGO Mindstorms EV3 running **ev3dev Buster** (ARM926EJ-S, ARMv5TE, glibc 2.28).
+micro-ROS for LEGO Mindstorms EV3 running **ev3dev Stretch** (ARM926EJ-S, ARMv5TE, glibc 2.24).
 
 This repository provides transport implementations and ready-to-build examples to run
 micro-ROS nodes on the EV3 brick and communicate with a ROS 2 system over serial or UDP.
@@ -14,7 +14,7 @@ graph LR
         Agent["micro-ROS agent\n(Docker)"]
         ROS2 <--> Agent
     end
-    subgraph EV3["EV3 / ev3dev Buster"]
+    subgraph EV3["EV3 / ev3dev Stretch"]
         App["micro-ROS app\n(linked against libmicroros.a)"]
     end
     Agent <-->|"Serial\nor UDP"| App
@@ -25,8 +25,10 @@ graph LR
 ```
 micro_ros_ev3/
 ├── ev3_toolchain.cmake
+├── third_party/
+│   └── microros/                             ← vendored libmicroros.a + micro-ROS headers (committed)
 ├── transport/
-│   ├── time_compat.c                         ← glibc 2.28 compatibility shim (always required)
+│   ├── time_compat.c                         ← glibc 2.24 compatibility shim (always required)
 │   ├── serial_transport.c                    ← POSIX serial (termios, 115200 baud)
 │   └── udp_transport.c                       ← POSIX UDP (sockets)
 └── examples/
@@ -42,17 +44,21 @@ micro_ros_ev3/
 ## Prerequisites
 
 - PC with Docker installed (64-bit Linux)
-- LEGO Mindstorms EV3 with [ev3dev Buster](https://www.ev3dev.org/)
+- LEGO Mindstorms EV3 with [ev3dev Stretch](https://github.com/ev3dev/ev3dev/releases/download/ev3dev-stretch-2020-04-10/ev3dev-stretch-ev3-generic-2020-04-10.zip)
 - Serial or network connection between PC and EV3
 
 ---
 
-## Step 1 — Get the micro-ROS static library
+## Step 1 — Get the micro-ROS static library (Optional)
 
 The static library (`libmicroros.a`) and headers are generated with a modified
 [micro-ROS static library builder](https://github.com/racarla96/micro-ROS-docker/tree/feature/lego-ev3-support)
 and the EV3 platform support added to
 [micro_ros_arduino](https://github.com/racarla96/micro_ros_arduino/tree/feature/lego-ev3-support).
+
+They are already vendored under [`third_party/microros/`](third_party/microros/) in this
+repository, so **most users can skip straight to [Step 2](#step-2--set-up-the-cross-compilation-environment)**.
+Regenerate them only if you need a different micro-ROS/ROS 2 distro or platform change.
 
 ### Option A — Pull the pre-built builder image from Docker Hub (recommended)
 
@@ -89,10 +95,15 @@ docker run -it \
   -p ev3
 ```
 
-After completion:
+After completion, copy the generated tree into this repo's `third_party/microros/`
+so examples can build against it without any external mount:
+
+```bash
+cp -r micro_ros_arduino/src/* /path/to/micro_ros_ev3/third_party/microros/
+```
 
 ```
-micro_ros_arduino/src/
+third_party/microros/
 ├── ev3/
 │   └── libmicroros.a     ← static library
 ├── rcl/
@@ -106,11 +117,11 @@ micro_ros_arduino/src/
 
 ## Step 2 — Set up the cross-compilation environment
 
-ev3dev provides a Docker image with `arm-linux-gnueabi-gcc` pre-configured for ev3dev Buster:
+ev3dev provides a Docker image with `arm-linux-gnueabi-gcc` pre-configured for ev3dev Stretch:
 
 ```bash
-docker pull ev3dev/debian-buster-cross
-docker tag ev3dev/debian-buster-cross ev3cc
+docker pull ev3dev/debian-stretch-cross
+docker tag ev3dev/debian-stretch-cross ev3cc
 ```
 
 > Reference: https://www.ev3dev.org/docs/tutorials/using-docker-to-cross-compile/
@@ -132,9 +143,11 @@ cd micro_ros_ev3
 
 ## Step 4 — Build an example
 
-All examples mount two volumes into the container:
-- `$(pwd)` → `/src` (this repo)
-- `<path-to-micro_ros_arduino/src>` → `/microros`
+Each example mounts a single volume into the container:
+- `$(pwd)` → `/src` (this repo, including the vendored `third_party/microros/`)
+
+`MICROROS_DIR` defaults to `third_party/microros` (relative to the repo root), so it
+does not need to be passed unless you generated the library into a different location.
 
 Adjust `agent_ip` in `main.c` before building UDP examples.
 
@@ -150,13 +163,11 @@ Edit `examples/micro_ros_publisher_serial/main.c` and set the serial device
 ```bash
 docker run --rm -it \
   -v $(pwd):/src \
-  -v $(pwd)/../micro-ROS-docker/micro_ros_arduino/src:/microros \
   -w /src ev3cc bash -c \
-  "apt-get install -y cmake > /dev/null && \
-   cmake -B build/publisher_serial examples/micro_ros_publisher_serial \
-     -DCMAKE_TOOLCHAIN_FILE=ev3_toolchain.cmake \
-     -DMICROROS_DIR=/microros && \
-   cmake --build build/publisher_serial"
+  "sudo apt-get install -y cmake > /dev/null && \
+   mkdir -p build/publisher_serial && cd build/publisher_serial && \
+   cmake ../../examples/micro_ros_publisher_serial -DCMAKE_TOOLCHAIN_FILE=../../ev3_toolchain.cmake && \
+   cmake --build ."
 ```
 
 ### Publisher — UDP
@@ -166,13 +177,11 @@ Edit `agent_ip` in `examples/micro_ros_publisher_udp/main.c`, then:
 ```bash
 docker run --rm -it \
   -v $(pwd):/src \
-  -v $(pwd)/../micro-ROS-docker/micro_ros_arduino/src:/microros \
   -w /src ev3cc bash -c \
-  "apt-get install -y cmake > /dev/null && \
-   cmake -B build/publisher_udp examples/micro_ros_publisher_udp \
-     -DCMAKE_TOOLCHAIN_FILE=ev3_toolchain.cmake \
-     -DMICROROS_DIR=/microros && \
-   cmake --build build/publisher_udp"
+  "sudo apt-get install -y cmake > /dev/null && \
+   mkdir -p build/publisher_udp && cd build/publisher_udp && \
+   cmake ../../examples/micro_ros_publisher_udp -DCMAKE_TOOLCHAIN_FILE=../../ev3_toolchain.cmake && \
+   cmake --build ."
 ```
 
 ### Subscriber — UDP
@@ -182,13 +191,11 @@ Subscribes to `ev3_topic` (std_msgs/Int32) and prints received values.
 ```bash
 docker run --rm -it \
   -v $(pwd):/src \
-  -v $(pwd)/../micro-ROS-docker/micro_ros_arduino/src:/microros \
   -w /src ev3cc bash -c \
-  "apt-get install -y cmake > /dev/null && \
-   cmake -B build/subscriber examples/micro_ros_subscriber \
-     -DCMAKE_TOOLCHAIN_FILE=ev3_toolchain.cmake \
-     -DMICROROS_DIR=/microros && \
-   cmake --build build/subscriber"
+  "sudo apt-get install -y cmake > /dev/null && \
+   mkdir -p build/subscriber && cd build/subscriber && \
+   cmake ../../examples/micro_ros_subscriber -DCMAKE_TOOLCHAIN_FILE=../../ev3_toolchain.cmake && \
+   cmake --build ."
 ```
 
 Test from the PC:
@@ -203,13 +210,11 @@ Exposes `/addtwoints` (example_interfaces/srv/AddTwoInts).
 ```bash
 docker run --rm -it \
   -v $(pwd):/src \
-  -v $(pwd)/../micro-ROS-docker/micro_ros_arduino/src:/microros \
   -w /src ev3cc bash -c \
-  "apt-get install -y cmake > /dev/null && \
-   cmake -B build/service examples/micro_ros_addtwoints_service \
-     -DCMAKE_TOOLCHAIN_FILE=ev3_toolchain.cmake \
-     -DMICROROS_DIR=/microros && \
-   cmake --build build/service"
+  "sudo apt-get install -y cmake > /dev/null && \
+   mkdir -p build/service && cd build/service && \
+   cmake ../../examples/micro_ros_addtwoints_service -DCMAKE_TOOLCHAIN_FILE=../../ev3_toolchain.cmake && \
+   cmake --build ."
 ```
 
 Test from the PC:
@@ -224,20 +229,18 @@ Synchronises the EV3 clock with the agent and prints the current UTC time every 
 ```bash
 docker run --rm -it \
   -v $(pwd):/src \
-  -v $(pwd)/../micro-ROS-docker/micro_ros_arduino/src:/microros \
   -w /src ev3cc bash -c \
-  "apt-get install -y cmake > /dev/null && \
-   cmake -B build/time_sync examples/micro_ros_time_sync \
-     -DCMAKE_TOOLCHAIN_FILE=ev3_toolchain.cmake \
-     -DMICROROS_DIR=/microros && \
-   cmake --build build/time_sync"
+  "sudo apt-get install -y cmake > /dev/null && \
+   mkdir -p build/time_sync && cd build/time_sync && \
+   cmake ../../examples/micro_ros_time_sync -DCMAKE_TOOLCHAIN_FILE=../../ev3_toolchain.cmake && \
+   cmake --build ."
 ```
 
 ---
 
 ## Step 5 — Copy the binary to the EV3
 
-Default ev3dev Buster credentials: **user** `robot`, **password** `maker`.
+Default ev3dev Stretch credentials: **user** `robot`, **password** `maker`.
 
 ```bash
 # Copy and set executable permissions in one step
@@ -246,7 +249,7 @@ ssh robot@ev3dev.local chmod +x micro_ros_publisher_udp
 ```
 
 The binary can then be launched directly from the EV3 screen using the
-ev3dev Buster file manager, or from an SSH/serial terminal.
+ev3dev Stretch file manager, or from an SSH/serial terminal.
 
 ---
 
@@ -282,7 +285,7 @@ ssh robot@ev3dev.local
 ### From the EV3 screen
 
 If the binary has executable permissions (set in Step 5), it can be launched
-directly from the ev3dev Buster file manager on the EV3 screen without needing
+directly from the ev3dev Stretch file manager on the EV3 screen without needing
 a PC terminal open.
 
 ### Verify on the PC
@@ -310,7 +313,7 @@ Check available devices: `ls /dev/tty*`
 ### glibc compatibility (`transport/time_compat.c`)
 
 The library is built on Ubuntu 24.04 (glibc 2.39), which redirects `clock_gettime`
-to `__clock_gettime64` on 32-bit ARM. ev3dev Buster (glibc 2.28) lacks that symbol.
+to `__clock_gettime64` on 32-bit ARM. ev3dev Stretch (glibc 2.24) lacks that symbol.
 `time_compat.c` provides the missing wrapper and **must always be included** in the build.
 
 ### Debug build

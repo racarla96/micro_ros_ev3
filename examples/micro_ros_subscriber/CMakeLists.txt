@@ -1,9 +1,9 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.7)
 project(micro_ros_subscriber C)
 
-set(MICROROS_DIR "" CACHE PATH "Path to micro-ROS src/ directory")
-if(NOT MICROROS_DIR)
-    message(FATAL_ERROR "Set -DMICROROS_DIR=<path/to/micro_ros_arduino/src>")
+set(MICROROS_DIR "${CMAKE_SOURCE_DIR}/../../third_party/microros" CACHE PATH "Path to micro-ROS src/ directory (contains headers and ev3/libmicroros.a)")
+if(NOT EXISTS "${MICROROS_DIR}/ev3/libmicroros.a")
+    message(FATAL_ERROR "libmicroros.a not found in ${MICROROS_DIR} — vendor it under third_party/microros or pass -DMICROROS_DIR=<path> (see README)")
 endif()
 
 set(TRANSPORT_DIR "${CMAKE_SOURCE_DIR}/../../transport")

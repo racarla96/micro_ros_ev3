@@ -21,3 +21,15 @@ int __clock_gettime64(clockid_t clkid, struct timespec64_compat *tp)
     }
     return ret;
 }
+
+/* Same Y2038 compat layer redirects time() to __time64 on 32-bit targets.
+ * ev3dev Stretch's older glibc lacks that symbol too (rclc_action pulls it
+ * in); delegate to the standard time(). */
+int64_t __time64(int64_t *timer)
+{
+    time_t t = time(NULL);
+    if (timer) {
+        *timer = (int64_t)t;
+    }
+    return (int64_t)t;
+}
