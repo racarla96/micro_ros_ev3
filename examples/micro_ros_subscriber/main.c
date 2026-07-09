@@ -7,6 +7,8 @@
 #include <std_msgs/msg/int32.h>
 #include <rmw_microros/rmw_microros.h>
 
+#include "../../transport/config.h"
+
 typedef struct { const char * agent_ip; uint16_t agent_port; } UDPTransportArgs;
 
 extern bool udp_transport_open(struct uxrCustomTransport *);
@@ -25,9 +27,14 @@ void subscription_callback(const void * msgin)
     fflush(stdout);
 }
 
-int main(void)
+int main(int argc, char * argv[])
 {
-    static UDPTransportArgs udp_args = { .agent_ip = "192.168.1.100", .agent_port = 8888 };
+    static ev3_config_t config;
+    ev3_config_load(argc, argv, "192.168.1.100", 8888, "ev3_topic", &config);
+
+    static UDPTransportArgs udp_args;
+    udp_args.agent_ip   = config.agent_ip;
+    udp_args.agent_port = config.agent_port;
 
     rmw_uros_set_custom_transport(
         false, &udp_args,
@@ -46,7 +53,7 @@ int main(void)
     rclc_subscription_init_default(
         &subscriber, &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
-        "ev3_topic"
+        config.topic_name
     );
 
     rclc_executor_t executor;

@@ -6,6 +6,8 @@
 #include <rclc/rclc.h>
 #include <rmw_microros/rmw_microros.h>
 
+#include "../../transport/config.h"
+
 typedef struct { const char * agent_ip; uint16_t agent_port; } UDPTransportArgs;
 
 extern bool udp_transport_open(struct uxrCustomTransport *);
@@ -15,9 +17,16 @@ extern size_t udp_transport_write(struct uxrCustomTransport *,
 extern size_t udp_transport_read(struct uxrCustomTransport *,
                                  uint8_t *, size_t, int, uint8_t *);
 
-int main(void)
+int main(int argc, char * argv[])
 {
-    static UDPTransportArgs udp_args = { .agent_ip = "192.168.1.100", .agent_port = 8888 };
+    /* time_sync has no topic, but agent_ip/agent_port are still configurable
+     * via config.txt / command-line arguments (see README). */
+    static ev3_config_t config;
+    ev3_config_load(argc, argv, "192.168.1.100", 8888, "", &config);
+
+    static UDPTransportArgs udp_args;
+    udp_args.agent_ip   = config.agent_ip;
+    udp_args.agent_port = config.agent_port;
 
     rmw_uros_set_custom_transport(
         false, &udp_args,

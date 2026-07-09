@@ -3,7 +3,7 @@
 micro-ROS for LEGO Mindstorms EV3 running **ev3dev Stretch** (ARM926EJ-S, ARMv5TE, glibc 2.24).
 
 This repository provides transport implementations and ready-to-build examples to run
-micro-ROS nodes on the EV3 brick and communicate with a ROS 2 system over serial or UDP.
+micro-ROS nodes on the EV3 brick and communicate with a ROS 2 system over UDP.
 
 ## System overview
 
@@ -17,26 +17,29 @@ graph LR
     subgraph EV3["EV3 / ev3dev Stretch"]
         App["micro-ROS app\n(linked against libmicroros.a)"]
     end
-    Agent <-->|"Serial\nor UDP"| App
+    Agent <-->|"UDP"| App
 ```
 
 ## Repository structure
 
 ```
 micro_ros_ev3/
+├── CMakeLists.txt                            ← builds every example at once (add_subdirectory)
 ├── ev3_toolchain.cmake
 ├── third_party/
 │   └── microros/                             ← vendored libmicroros.a + micro-ROS headers (committed)
 ├── transport/
 │   ├── time_compat.c                         ← glibc 2.24 compatibility shim (always required)
-│   ├── serial_transport.c                    ← POSIX serial (termios, 115200 baud)
+│   ├── config.c                              ← agent_ip/agent_port/topic from config.txt or argv (always required)
 │   └── udp_transport.c                       ← POSIX UDP (sockets)
 └── examples/
-    ├── micro_ros_publisher_serial/           ← publisher over serial
     ├── micro_ros_publisher_udp/             ← publisher over UDP
     ├── micro_ros_subscriber/                ← subscriber over UDP
+    ├── micro_ros_subscriber_twist/          ← Twist subscriber (logs linear.x/angular.z)
     ├── micro_ros_addtwoints_service/        ← AddTwoInts service server over UDP
-    └── micro_ros_time_sync/                 ← time synchronisation with the agent over UDP
+    ├── micro_ros_time_sync/                 ← time synchronisation with the agent over UDP
+    ├── micro_ros_reconnection/              ← publisher that survives agent restarts/disconnects
+    └── micro_ros_motor_twist/               ← cmd_vel -> two motors on an independent thread, odometry feedback
 ```
 
 ---
@@ -45,7 +48,7 @@ micro_ros_ev3/
 
 - PC with Docker installed (64-bit Linux)
 - LEGO Mindstorms EV3 with [ev3dev Stretch](https://github.com/ev3dev/ev3dev/releases/download/ev3dev-stretch-2020-04-10/ev3dev-stretch-ev3-generic-2020-04-10.zip)
-- Serial or network connection between PC and EV3
+- Network connection between PC and EV3 (same LAN, or the USB Ethernet gadget)
 
 ---
 
@@ -149,29 +152,27 @@ Each example mounts a single volume into the container:
 `MICROROS_DIR` defaults to `third_party/microros` (relative to the repo root), so it
 does not need to be passed unless you generated the library into a different location.
 
-Adjust `agent_ip` in `main.c` before building UDP examples.
+### Runtime configuration: agent IP, port and topic
 
-### Publisher — serial
+Every example reads its `agent_ip` / `agent_port` / topic (or service) name through
+[`transport/config.c`](transport/config.c), in increasing priority:
 
-Edit `examples/micro_ros_publisher_serial/main.c` and set the serial device
-(see [serial devices table](#serial-devices-on-ev3dev)):
+1. Compiled-in defaults (shown per example below).
+2. A `config.txt` file **next to the binary** on the EV3 (not the current directory —
+   this also works when launched from the EV3 screen), with `key=value` lines:
+   ```
+   agent_ip=192.168.1.50
+   agent_port=8888
+   topic=ev3_topic
+   ```
+3. Command-line arguments, positional: `./binary [agent_ip] [agent_port] [topic]`.
 
-```c
-(void *)"/dev/ttyS1",
-```
-
-```bash
-docker run --rm -it \
-  -v $(pwd):/src \
-  -w /src ev3cc bash -c \
-  "mkdir -p build/publisher_serial && cd build/publisher_serial && \
-   cmake ../../examples/micro_ros_publisher_serial -DCMAKE_TOOLCHAIN_FILE=../../ev3_toolchain.cmake && \
-   cmake --build ."
-```
+Run any example with `-h` or `--help` to print its current defaults and usage.
+`micro_ros_time_sync` has no topic/service argument; `micro_ros_motor_twist` only
+uses the third argument for the `cmd_vel` subscription — its odometry output topic
+(`wheel_twist`) is fixed.
 
 ### Publisher — UDP
-
-Edit `agent_ip` in `examples/micro_ros_publisher_udp/main.c`, then:
 
 ```bash
 docker run --rm -it \
@@ -181,6 +182,8 @@ docker run --rm -it \
    cmake ../../examples/micro_ros_publisher_udp -DCMAKE_TOOLCHAIN_FILE=../../ev3_toolchain.cmake && \
    cmake --build ."
 ```
+
+Default: agent `192.168.0.102:8888`, topic `ev3_topic`.
 
 ### Subscriber — UDP
 
@@ -198,6 +201,27 @@ docker run --rm -it \
 Test from the PC:
 ```bash
 ros2 topic pub /ev3_topic std_msgs/msg/Int32 "{data: 42}"
+```
+
+### Subscriber — Twist
+
+Subscribes to `cmd_vel` (geometry_msgs/Twist) and prints `linear.x`/`angular.z`.
+Ported from micro_ros_arduino's
+[`micro-ros_subscriber_twist`](https://github.com/racarla96/micro_ros_arduino/blob/kilted/examples/micro-ros_subscriber_twist/micro-ros_subscriber_twist.ino)
+example.
+
+```bash
+docker run --rm -it \
+  -v $(pwd):/src \
+  -w /src ev3cc bash -c \
+  "mkdir -p build/subscriber_twist && cd build/subscriber_twist && \
+   cmake ../../examples/micro_ros_subscriber_twist -DCMAKE_TOOLCHAIN_FILE=../../ev3_toolchain.cmake && \
+   cmake --build ."
+```
+
+Test from the PC:
+```bash
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 1.0}}"
 ```
 
 ### AddTwoInts service server — UDP
@@ -231,6 +255,73 @@ docker run --rm -it \
    cmake --build ."
 ```
 
+### Reconnection — UDP
+
+Publishes `ev3_topic` (std_msgs/Int32) like the plain publisher, but survives the
+agent restarting or the network dropping: it waits for the agent, (re)creates all
+entities on connect, and tears them down cleanly on disconnect instead of getting
+stuck. Ported from micro_ros_arduino's
+[`micro-ros_reconnection_example`](https://github.com/racarla96/micro_ros_arduino/blob/kilted/examples/micro-ros_reconnection_example/micro-ros_reconnection_example.ino).
+
+```bash
+docker run --rm -it \
+  -v $(pwd):/src \
+  -w /src ev3cc bash -c \
+  "mkdir -p build/reconnection && cd build/reconnection && \
+   cmake ../../examples/micro_ros_reconnection -DCMAKE_TOOLCHAIN_FILE=../../ev3_toolchain.cmake && \
+   cmake --build ."
+```
+
+Try stopping and restarting the agent (Step 6) while this runs — it should print
+`waiting for agent` → `agent available` → `connected` and keep publishing once the
+agent is back, instead of needing a restart.
+
+### Motor Twist — UDP (independent thread)
+
+Drives two motors from `cmd_vel` (geometry_msgs/Twist) on a differential-drive base,
+and publishes measured wheel odometry back as `wheel_twist` (geometry_msgs/Twist) at
+a configurable rate. Motor control runs on its **own pthread**, decoupled from the
+ROS executor thread, so commands (and the no-data safety stop) keep a steady rate
+regardless of executor/agent jitter. See
+[`examples/micro_ros_motor_twist/main.c`](examples/micro_ros_motor_twist/main.c) and
+[`motor.c`](examples/micro_ros_motor_twist/motor.c) (ev3dev `tacho-motor` sysfs driver).
+
+Motors default to `outB` (left) / `outC` (right) — edit `MOTOR_LEFT_PORT` /
+`MOTOR_RIGHT_PORT` in `main.c` if your robot wires them differently. Wheel diameter
+(56mm) and track width (120mm) are standard LEGO EV3 values — edit
+`WHEEL_DIAMETER_MM` / `TRACK_WIDTH_MM` for your chassis. The safety stop
+(`CMD_TIMEOUT_MS`, default 500ms) stops both motors if no `cmd_vel` message arrives
+in time. Odometry publish rate defaults to `PUBLISH_RATE_HZ` = 10 Hz.
+
+```bash
+docker run --rm -it \
+  -v $(pwd):/src \
+  -w /src ev3cc bash -c \
+  "mkdir -p build/motor_twist && cd build/motor_twist && \
+   cmake ../../examples/micro_ros_motor_twist -DCMAKE_TOOLCHAIN_FILE=../../ev3_toolchain.cmake && \
+   cmake --build ."
+```
+
+Test from the PC:
+```bash
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.3}}"
+ros2 topic echo /wheel_twist
+```
+
+### Build all examples at once
+
+The root [`CMakeLists.txt`](CMakeLists.txt) adds every example as a subdirectory, so
+a single configure/build pass produces all seven binaries under `build/all/examples/`:
+
+```bash
+docker run --rm -it \
+  -v $(pwd):/src \
+  -w /src ev3cc bash -c \
+  "mkdir -p build/all && cd build/all && \
+   cmake ../.. -DCMAKE_TOOLCHAIN_FILE=../../ev3_toolchain.cmake && \
+   cmake --build ."
+```
+
 ---
 
 ## Step 5 — Copy the binary to the EV3
@@ -249,16 +340,6 @@ ev3dev Stretch file manager, or from an SSH/serial terminal.
 ---
 
 ## Step 6 — Run the micro-ROS agent on the PC
-
-### Serial agent
-
-```bash
-docker run -it --rm --privileged -v /dev:/dev \
-  microros/micro-ros-agent:jazzy \
-  serial --dev /dev/ttyUSB0 -b 115200
-```
-
-### UDP agent
 
 ```bash
 docker run -it --rm --net=host \
@@ -288,18 +369,6 @@ a PC terminal open.
 ```bash
 ros2 topic echo /ev3_topic
 ```
-
----
-
-## Serial devices on ev3dev
-
-| Connection | Device on EV3 |
-|---|---|
-| USB cable (micro-USB ↔ USB-A) | `/dev/ttyGS0` |
-| EV3 sensor port 1 (UART) | `/dev/ttyS1` |
-| Bluetooth serial | `/dev/ttyS2` |
-
-Check available devices: `ls /dev/tty*`
 
 ---
 

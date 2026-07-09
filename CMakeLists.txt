@@ -1,0 +1,10 @@
+cmake_minimum_required(VERSION 3.7)
+project(micro_ros_ev3_examples C)
+
+add_subdirectory(examples/micro_ros_publisher_udp)
+add_subdirectory(examples/micro_ros_subscriber)
+add_subdirectory(examples/micro_ros_addtwoints_service)
+add_subdirectory(examples/micro_ros_time_sync)
+add_subdirectory(examples/micro_ros_reconnection)
+add_subdirectory(examples/micro_ros_subscriber_twist)
+add_subdirectory(examples/micro_ros_motor_twist)

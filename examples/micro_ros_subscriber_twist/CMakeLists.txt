@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.7)
-project(micro_ros_publisher_udp C)
+project(micro_ros_subscriber_twist C)
 
 set(MICROROS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/microros" CACHE PATH "Path to micro-ROS src/ directory (contains headers and ev3/libmicroros.a)")
 if(NOT EXISTS "${MICROROS_DIR}/ev3/libmicroros.a")
@@ -8,16 +8,16 @@ endif()
 
 set(TRANSPORT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../transport")
 
-add_executable(micro_ros_publisher_udp
+add_executable(micro_ros_subscriber_twist
     main.c
     ${TRANSPORT_DIR}/udp_transport.c
     ${TRANSPORT_DIR}/time_compat.c
     ${TRANSPORT_DIR}/config.c
 )
 
-target_include_directories(micro_ros_publisher_udp PRIVATE ${MICROROS_DIR})
+target_include_directories(micro_ros_subscriber_twist PRIVATE ${MICROROS_DIR})
 
-target_link_libraries(micro_ros_publisher_udp
+target_link_libraries(micro_ros_subscriber_twist
     ${MICROROS_DIR}/ev3/libmicroros.a
     m pthread
 )

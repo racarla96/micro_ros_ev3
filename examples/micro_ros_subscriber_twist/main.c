@@ -4,7 +4,7 @@
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
 #include <rclc/executor.h>
-#include <example_interfaces/srv/add_two_ints.h>
+#include <geometry_msgs/msg/twist.h>
 #include <rmw_microros/rmw_microros.h>
 
 #include "../../transport/config.h"
@@ -18,25 +18,20 @@ extern size_t udp_transport_write(struct uxrCustomTransport *,
 extern size_t udp_transport_read(struct uxrCustomTransport *,
                                  uint8_t *, size_t, int, uint8_t *);
 
-static example_interfaces__srv__AddTwoInts_Request  req;
-static example_interfaces__srv__AddTwoInts_Response res;
+static geometry_msgs__msg__Twist msg;
 
-void service_callback(const void * request, void * response)
+void subscription_callback(const void * msgin)
 {
-    const example_interfaces__srv__AddTwoInts_Request  * req_in =
-        (const example_interfaces__srv__AddTwoInts_Request *)request;
-    example_interfaces__srv__AddTwoInts_Response * res_in =
-        (example_interfaces__srv__AddTwoInts_Response *)response;
-
-    printf("Request: %lld + %lld\n", (long long)req_in->a, (long long)req_in->b);
-    res_in->sum = req_in->a + req_in->b;
+    const geometry_msgs__msg__Twist * m = (const geometry_msgs__msg__Twist *)msgin;
+    printf("linear.x=%.2f angular.z=%.2f -> %s\n",
+           m->linear.x, m->angular.z, (m->linear.x == 0.0) ? "stopped" : "moving");
     fflush(stdout);
 }
 
 int main(int argc, char * argv[])
 {
     static ev3_config_t config;
-    ev3_config_load(argc, argv, "192.168.1.100", 8888, "/addtwoints", &config);
+    ev3_config_load(argc, argv, "192.168.1.100", 8888, "cmd_vel", &config);
 
     static UDPTransportArgs udp_args;
     udp_args.agent_ip   = config.agent_ip;
@@ -53,18 +48,19 @@ int main(int argc, char * argv[])
     rclc_support_init(&support, 0, NULL, &allocator);
 
     rcl_node_t node;
-    rclc_node_init_default(&node, "ev3_service", "", &support);
+    rclc_node_init_default(&node, "ev3_subscriber_twist", "", &support);
 
-    rcl_service_t service;
-    rclc_service_init_default(
-        &service, &node,
-        ROSIDL_GET_SRV_TYPE_SUPPORT(example_interfaces, srv, AddTwoInts),
+    rcl_subscription_t subscriber;
+    rclc_subscription_init_default(
+        &subscriber, &node,
+        ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist),
         config.topic_name
     );
 
     rclc_executor_t executor;
     rclc_executor_init(&executor, &support.context, 1, &allocator);
-    rclc_executor_add_service(&executor, &service, &req, &res, service_callback);
+    rclc_executor_add_subscription(&executor, &subscriber, &msg,
+                                   &subscription_callback, ON_NEW_DATA);
 
     rclc_executor_spin(&executor);
 

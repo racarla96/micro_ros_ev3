@@ -6,6 +6,8 @@
 #include <std_msgs/msg/int32.h>
 #include <rmw_microros/rmw_microros.h>
 
+#include "../../transport/config.h"
+
 typedef struct { const char * agent_ip; uint16_t agent_port; } UDPTransportArgs;
 
 extern bool udp_transport_open(struct uxrCustomTransport *);
@@ -15,10 +17,16 @@ extern size_t udp_transport_write(struct uxrCustomTransport *,
 extern size_t udp_transport_read(struct uxrCustomTransport *,
                                  uint8_t *, size_t, int, uint8_t *);
 
-int main(void)
+int main(int argc, char * argv[])
 {
-    /* Set agent_ip to the IP of the PC running the micro-ROS agent */
-    static UDPTransportArgs udp_args = { .agent_ip = "192.168.1.100", .agent_port = 8888 };
+    /* agent_ip/agent_port/topic can be overridden via config.txt next to the
+     * binary or command-line arguments (see README); these are just defaults. */
+    static ev3_config_t config;
+    ev3_config_load(argc, argv, "192.168.0.102", 8888, "ev3_topic", &config);
+
+    static UDPTransportArgs udp_args;
+    udp_args.agent_ip   = config.agent_ip;
+    udp_args.agent_port = config.agent_port;
 
     rmw_uros_set_custom_transport(
         false,
@@ -41,7 +49,7 @@ int main(void)
     rclc_publisher_init_default(
         &publisher, &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
-        "ev3_topic"
+        config.topic_name
     );
 
     msg.data = 0;
