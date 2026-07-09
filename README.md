@@ -301,6 +301,26 @@ C++ (the only C++ example here), using the vendored
 [`main.cpp`](examples/micro_ros_motor_twist/main.cpp) and edit the `#define`s at the
 top for your robot (motor ports, wheel diameter, track width).
 
+```mermaid
+graph LR
+    CmdVel(("/cmd_vel\nTwist")) -->|ON_NEW_DATA| Sub[subscription_callback]
+    Sub -->|lock, write| State[("cmd_vel_state\nmutex-protected")]
+
+    subgraph Executor["executor thread"]
+        Sub
+        OdomTimer["odom_timer_callback\n@ PUBLISH_RATE_HZ"]
+    end
+
+    subgraph MotorThread["motor_control_thread\n@ 1000/CONTROL_PERIOD_MS Hz"]
+        Kinematics["inverse kinematics\n+ CMD_TIMEOUT_MS watchdog"]
+    end
+
+    State -->|lock, read| Kinematics
+    Kinematics -->|set_speed_sp / stop| Motors["ev3dev::large_motor\nleft (outB) / right (outC)"]
+    Motors -->|read speed| OdomTimer
+    OdomTimer -->|rcl_publish| WheelTwist(("/wheel_twist\nTwist"))
+```
+
 ```bash
 docker run --rm -it \
   -v $(pwd):/src \
