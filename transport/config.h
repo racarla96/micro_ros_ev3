@@ -3,6 +3,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define EV3_CONFIG_IP_MAX   64
 #define EV3_CONFIG_NAME_MAX 128
 
@@ -22,5 +26,9 @@ typedef struct {
 void ev3_config_load(int argc, char ** argv,
                      const char * default_ip, uint16_t default_port,
                      const char * default_topic, ev3_config_t * out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

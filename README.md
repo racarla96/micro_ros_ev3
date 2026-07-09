@@ -4,6 +4,9 @@ micro-ROS for LEGO Mindstorms EV3 running **ev3dev Stretch** (ARM926EJ-S, ARMv5T
 
 This repository provides transport implementations and ready-to-build examples to run
 micro-ROS nodes on the EV3 brick and communicate with a ROS 2 system over UDP.
+Everything is plain C except `micro_ros_motor_twist`, which is C++ so it can use the
+[ev3dev-lang-cpp](https://github.com/ddemidov/ev3dev-lang-cpp) motor driver instead of
+talking to `/sys/class/tacho-motor` by hand.
 
 ## System overview
 
@@ -27,7 +30,8 @@ micro_ros_ev3/
 ├── CMakeLists.txt                            ← builds every example at once (add_subdirectory)
 ├── ev3_toolchain.cmake
 ├── third_party/
-│   └── microros/                             ← vendored libmicroros.a + micro-ROS headers (committed)
+│   ├── microros/                             ← vendored libmicroros.a + micro-ROS headers (committed)
+│   └── ev3dev-lang-cpp/                      ← vendored ev3dev.h/ev3dev.cpp (MIT), used by micro_ros_motor_twist
 ├── transport/
 │   ├── time_compat.c                         ← glibc 2.24 compatibility shim (always required)
 │   ├── config.c                              ← agent_ip/agent_port/topic from config.txt or argv (always required)
@@ -242,6 +246,17 @@ Test from the PC:
 ros2 service call /addtwoints example_interfaces/srv/AddTwoInts "{a: 3, b: 5}"
 ```
 
+> If `ros2 service call` reports **"the passed service type is invalid"**, the
+> `example_interfaces` package isn't installed in whatever ROS 2 environment is
+> issuing the call (a known micro-ROS gotcha —
+> [micro_ros_arduino#1167](https://github.com/micro-ROS/micro_ros_arduino/issues/1167)):
+> ```bash
+> sudo apt install ros-jazzy-example-interfaces
+> ```
+> If you call it from inside a container (e.g. the agent's), install it there too —
+> the CLI needs the type definition locally to serialize the request even though
+> the service itself is discovered fine.
+
 ### Time synchronisation — UDP
 
 Synchronises the EV3 clock with the agent and prints the current UTC time every second.
@@ -278,20 +293,13 @@ agent is back, instead of needing a restart.
 
 ### Motor Twist — UDP (independent thread)
 
-Drives two motors from `cmd_vel` (geometry_msgs/Twist) on a differential-drive base,
-and publishes measured wheel odometry back as `wheel_twist` (geometry_msgs/Twist) at
-a configurable rate. Motor control runs on its **own pthread**, decoupled from the
-ROS executor thread, so commands (and the no-data safety stop) keep a steady rate
-regardless of executor/agent jitter. See
-[`examples/micro_ros_motor_twist/main.c`](examples/micro_ros_motor_twist/main.c) and
-[`motor.c`](examples/micro_ros_motor_twist/motor.c) (ev3dev `tacho-motor` sysfs driver).
-
-Motors default to `outB` (left) / `outC` (right) — edit `MOTOR_LEFT_PORT` /
-`MOTOR_RIGHT_PORT` in `main.c` if your robot wires them differently. Wheel diameter
-(56mm) and track width (120mm) are standard LEGO EV3 values — edit
-`WHEEL_DIAMETER_MM` / `TRACK_WIDTH_MM` for your chassis. The safety stop
-(`CMD_TIMEOUT_MS`, default 500ms) stops both motors if no `cmd_vel` message arrives
-in time. Odometry publish rate defaults to `PUBLISH_RATE_HZ` = 10 Hz.
+Drives two motors from `cmd_vel` (geometry_msgs/Twist, real m/s and rad/s) via
+differential-drive kinematics, and publishes measured odometry back as
+`wheel_twist`. Motor control runs on its own pthread with a no-data safety stop.
+C++ (the only C++ example here), using the vendored
+[`ev3dev-lang-cpp`](https://github.com/ddemidov/ev3dev-lang-cpp) motor driver — see
+[`main.cpp`](examples/micro_ros_motor_twist/main.cpp) and edit the `#define`s at the
+top for your robot (motor ports, wheel diameter, track width).
 
 ```bash
 docker run --rm -it \
@@ -302,11 +310,15 @@ docker run --rm -it \
    cmake --build ."
 ```
 
-Test from the PC:
+Test from the PC (use `-r`, a one-shot `ros2 topic pub` is under 1 Hz and trips the
+`CMD_TIMEOUT_MS` safety stop between messages):
 ```bash
-ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.3}}"
+ros2 topic pub -r 10 /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.3}, angular: {z: 0.1}}"
 ros2 topic echo /wheel_twist
 ```
+
+Motor write/read failures (e.g. sysfs permissions) are caught and logged to stderr
+instead of crashing the process.
 
 ### Build all examples at once
 
