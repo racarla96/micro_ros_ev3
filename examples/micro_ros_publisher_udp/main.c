@@ -17,16 +17,17 @@ extern size_t udp_transport_write(struct uxrCustomTransport *,
 extern size_t udp_transport_read(struct uxrCustomTransport *,
                                  uint8_t *, size_t, int, uint8_t *);
 
+static const char * const kConfigKeys[] = { "agent_ip", "agent_port", "topic", NULL };
+
 int main(int argc, char * argv[])
 {
-    /* agent_ip/agent_port/topic can be overridden via config.txt next to the
-     * binary or command-line arguments (see README); these are just defaults. */
     static ev3_config_t config;
-    ev3_config_load(argc, argv, "192.168.0.102", 8888, "ev3_topic", &config);
+    ev3_config_load(argc, argv, kConfigKeys, &config);
 
     static UDPTransportArgs udp_args;
-    udp_args.agent_ip   = config.agent_ip;
-    udp_args.agent_port = config.agent_port;
+    udp_args.agent_ip   = ev3_config_get_string(&config, "agent_ip", "192.168.0.102");
+    udp_args.agent_port = ev3_config_get_uint16(&config, "agent_port", 8888);
+    const char * topic  = ev3_config_get_string(&config, "topic", "ev3_topic");
 
     rmw_uros_set_custom_transport(
         false,
@@ -49,7 +50,7 @@ int main(int argc, char * argv[])
     rclc_publisher_init_default(
         &publisher, &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
-        config.topic_name
+        topic
     );
 
     msg.data = 0;

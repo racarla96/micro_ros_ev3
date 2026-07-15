@@ -17,16 +17,16 @@ extern size_t udp_transport_write(struct uxrCustomTransport *,
 extern size_t udp_transport_read(struct uxrCustomTransport *,
                                  uint8_t *, size_t, int, uint8_t *);
 
+static const char * const kConfigKeys[] = { "agent_ip", "agent_port", NULL };
+
 int main(int argc, char * argv[])
 {
-    /* time_sync has no topic, but agent_ip/agent_port are still configurable
-     * via config.txt / command-line arguments (see README). */
     static ev3_config_t config;
-    ev3_config_load(argc, argv, "192.168.1.100", 8888, "", &config);
+    ev3_config_load(argc, argv, kConfigKeys, &config);
 
     static UDPTransportArgs udp_args;
-    udp_args.agent_ip   = config.agent_ip;
-    udp_args.agent_port = config.agent_port;
+    udp_args.agent_ip   = ev3_config_get_string(&config, "agent_ip", "192.168.1.100");
+    udp_args.agent_port = ev3_config_get_uint16(&config, "agent_port", 8888);
 
     rmw_uros_set_custom_transport(
         false, &udp_args,

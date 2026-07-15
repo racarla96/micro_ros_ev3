@@ -28,14 +28,17 @@ void subscription_callback(const void * msgin)
     fflush(stdout);
 }
 
+static const char * const kConfigKeys[] = { "agent_ip", "agent_port", "topic", NULL };
+
 int main(int argc, char * argv[])
 {
     static ev3_config_t config;
-    ev3_config_load(argc, argv, "192.168.1.100", 8888, "cmd_vel", &config);
+    ev3_config_load(argc, argv, kConfigKeys, &config);
 
     static UDPTransportArgs udp_args;
-    udp_args.agent_ip   = config.agent_ip;
-    udp_args.agent_port = config.agent_port;
+    udp_args.agent_ip   = ev3_config_get_string(&config, "agent_ip", "192.168.1.100");
+    udp_args.agent_port = ev3_config_get_uint16(&config, "agent_port", 8888);
+    const char * topic  = ev3_config_get_string(&config, "topic", "cmd_vel");
 
     rmw_uros_set_custom_transport(
         false, &udp_args,
@@ -54,7 +57,7 @@ int main(int argc, char * argv[])
     rclc_subscription_init_default(
         &subscriber, &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist),
-        config.topic_name
+        topic
     );
 
     rclc_executor_t executor;

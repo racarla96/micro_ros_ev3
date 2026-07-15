@@ -36,6 +36,9 @@ static rcl_allocator_t allocator;
 static rcl_publisher_t publisher;
 static std_msgs__msg__Int32 msg;
 static ev3_config_t config;
+static const char * g_topic;
+
+static const char * const kConfigKeys[] = { "agent_ip", "agent_port", "topic", NULL };
 
 static const char * state_name(enum states s)
 {
@@ -69,7 +72,7 @@ static bool create_entities(void)
     if (rclc_publisher_init_best_effort(
             &publisher, &node,
             ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
-            config.topic_name) != RCL_RET_OK) return false;
+            g_topic) != RCL_RET_OK) return false;
 
     const unsigned int timer_timeout = 1000;
     if (rclc_timer_init_default(&timer, &support, RCL_MS_TO_NS(timer_timeout), timer_callback) != RCL_RET_OK) return false;
@@ -95,11 +98,12 @@ static void destroy_entities(void)
 
 int main(int argc, char * argv[])
 {
-    ev3_config_load(argc, argv, "192.168.1.100", 8888, "ev3_topic", &config);
+    ev3_config_load(argc, argv, kConfigKeys, &config);
+    g_topic = ev3_config_get_string(&config, "topic", "ev3_topic");
 
     static UDPTransportArgs udp_args;
-    udp_args.agent_ip   = config.agent_ip;
-    udp_args.agent_port = config.agent_port;
+    udp_args.agent_ip   = ev3_config_get_string(&config, "agent_ip", "192.168.1.100");
+    udp_args.agent_port = ev3_config_get_uint16(&config, "agent_port", 8888);
 
     rmw_uros_set_custom_transport(
         false, &udp_args,

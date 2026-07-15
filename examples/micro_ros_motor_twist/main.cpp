@@ -203,14 +203,20 @@ static void * motor_control_thread(void * arg)
     return NULL;
 }
 
+static const char * const kConfigKeys[] = {
+    "agent_ip", "agent_port", "cmd_vel_topic", "wheel_twist_topic", NULL
+};
+
 int main(int argc, char * argv[])
 {
     static ev3_config_t config;
-    ev3_config_load(argc, argv, "192.168.1.100", 8888, "cmd_vel", &config);
+    ev3_config_load(argc, argv, kConfigKeys, &config);
 
     static UDPTransportArgs udp_args;
-    udp_args.agent_ip   = config.agent_ip;
-    udp_args.agent_port = config.agent_port;
+    udp_args.agent_ip   = ev3_config_get_string(&config, "agent_ip", "192.168.1.100");
+    udp_args.agent_port = ev3_config_get_uint16(&config, "agent_port", 8888);
+    const char * cmd_vel_topic    = ev3_config_get_string(&config, "cmd_vel_topic", "cmd_vel");
+    const char * wheel_twist_topic = ev3_config_get_string(&config, "wheel_twist_topic", "wheel_twist");
 
     rmw_uros_set_custom_transport(
         false, &udp_args,
@@ -253,13 +259,13 @@ int main(int argc, char * argv[])
     rclc_subscription_init_default(
         &subscriber, &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist),
-        config.topic_name
+        cmd_vel_topic
     );
 
     rclc_publisher_init_best_effort(
         &odom_publisher, &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist),
-        "wheel_twist"
+        wheel_twist_topic
     );
 
     rcl_timer_t odom_timer;

@@ -34,7 +34,7 @@ micro_ros_ev3/
 │   └── ev3dev-lang-cpp/                      ← vendored ev3dev.h/ev3dev.cpp (MIT), used by micro_ros_motor_twist
 ├── transport/
 │   ├── time_compat.c                         ← glibc 2.24 compatibility shim (always required)
-│   ├── config.c                              ← agent_ip/agent_port/topic from config.txt or argv (always required)
+│   ├── config.c                              ← per-example config from <binary>.cfg or argv (always required)
 │   └── udp_transport.c                       ← POSIX UDP (sockets)
 └── examples/
     ├── micro_ros_publisher_udp/             ← publisher over UDP
@@ -156,30 +156,32 @@ Each example mounts a single volume into the container:
 `MICROROS_DIR` defaults to `third_party/microros` (relative to the repo root), so it
 does not need to be passed unless you generated the library into a different location.
 
-### Runtime configuration: agent IP, port and topic
+### Runtime configuration
 
-Every example reads its `agent_ip` / `agent_port` / topic (or service) name through
-[`transport/config.c`](transport/config.c), in increasing priority:
+Each example defines its own keys via [`transport/config.c`](transport/config.c),
+read in increasing priority:
 
-1. Compiled-in defaults (shown per example below).
-2. A `config.txt` file **next to the binary** on the EV3 (not the current directory —
-   this also works when launched from the EV3 screen), with `key=value` lines:
-   ```
-   agent_ip=192.168.1.50
-   agent_port=8888
-   topic=ev3_topic
-   ```
-3. Command-line arguments, positional: `./binary [agent_ip] [agent_port] [topic]`.
+1. Compiled-in defaults (below).
+2. `<binary_name>.cfg` next to the binary (`key=value` lines, e.g. `agent_ip=192.168.1.50`).
+3. Command-line arguments, also `key=value`: `./binary agent_ip=192.168.1.50 topic=foo`.
 
-Run any example with `-h` or `--help` to print its current defaults and usage.
-`micro_ros_time_sync` has no topic/service argument; `micro_ros_motor_twist` only
-uses the third argument for the `cmd_vel` subscription — its odometry output topic
-(`wheel_twist`) is fixed.
+Run any example with `-h` or `--help` to list its keys and defaults.
+
+| Example | Keys and defaults |
+|---|---|
+| `micro_ros_publisher_udp` | `agent_ip=192.168.0.102` `agent_port=8888` `topic=ev3_topic` |
+| `micro_ros_subscriber` | `agent_ip=192.168.1.100` `agent_port=8888` `topic=ev3_topic` |
+| `micro_ros_subscriber_twist` | `agent_ip=192.168.1.100` `agent_port=8888` `topic=cmd_vel` |
+| `micro_ros_addtwoints_service` | `agent_ip=192.168.1.100` `agent_port=8888` `service=/addtwoints` |
+| `micro_ros_time_sync` | `agent_ip=192.168.1.100` `agent_port=8888` |
+| `micro_ros_reconnection` | `agent_ip=192.168.1.100` `agent_port=8888` `topic=ev3_topic` |
+| `micro_ros_motor_twist` | `agent_ip=192.168.1.100` `agent_port=8888` `cmd_vel_topic=cmd_vel` `wheel_twist_topic=wheel_twist` |
 
 ### Publisher — UDP
 
 ```bash
 docker run --rm -it \
+  --user $(id -u):$(id -g) \
   -v $(pwd):/src \
   -w /src ev3cc bash -c \
   "mkdir -p build/publisher_udp && cd build/publisher_udp && \
@@ -195,6 +197,7 @@ Subscribes to `ev3_topic` (std_msgs/Int32) and prints received values.
 
 ```bash
 docker run --rm -it \
+  --user $(id -u):$(id -g) \
   -v $(pwd):/src \
   -w /src ev3cc bash -c \
   "mkdir -p build/subscriber && cd build/subscriber && \
@@ -216,6 +219,7 @@ example.
 
 ```bash
 docker run --rm -it \
+  --user $(id -u):$(id -g) \
   -v $(pwd):/src \
   -w /src ev3cc bash -c \
   "mkdir -p build/subscriber_twist && cd build/subscriber_twist && \
@@ -234,6 +238,7 @@ Exposes `/addtwoints` (example_interfaces/srv/AddTwoInts).
 
 ```bash
 docker run --rm -it \
+  --user $(id -u):$(id -g) \
   -v $(pwd):/src \
   -w /src ev3cc bash -c \
   "mkdir -p build/service && cd build/service && \
@@ -263,6 +268,7 @@ Synchronises the EV3 clock with the agent and prints the current UTC time every 
 
 ```bash
 docker run --rm -it \
+  --user $(id -u):$(id -g) \
   -v $(pwd):/src \
   -w /src ev3cc bash -c \
   "mkdir -p build/time_sync && cd build/time_sync && \
@@ -280,6 +286,7 @@ stuck. Ported from micro_ros_arduino's
 
 ```bash
 docker run --rm -it \
+  --user $(id -u):$(id -g) \
   -v $(pwd):/src \
   -w /src ev3cc bash -c \
   "mkdir -p build/reconnection && cd build/reconnection && \
@@ -323,6 +330,7 @@ graph LR
 
 ```bash
 docker run --rm -it \
+  --user $(id -u):$(id -g) \
   -v $(pwd):/src \
   -w /src ev3cc bash -c \
   "mkdir -p build/motor_twist && cd build/motor_twist && \
@@ -347,6 +355,7 @@ a single configure/build pass produces all seven binaries under `build/all/examp
 
 ```bash
 docker run --rm -it \
+  --user $(id -u):$(id -g) \
   -v $(pwd):/src \
   -w /src ev3cc bash -c \
   "mkdir -p build/all && cd build/all && \

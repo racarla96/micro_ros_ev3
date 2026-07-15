@@ -33,14 +33,17 @@ void service_callback(const void * request, void * response)
     fflush(stdout);
 }
 
+static const char * const kConfigKeys[] = { "agent_ip", "agent_port", "service", NULL };
+
 int main(int argc, char * argv[])
 {
     static ev3_config_t config;
-    ev3_config_load(argc, argv, "192.168.1.100", 8888, "/addtwoints", &config);
+    ev3_config_load(argc, argv, kConfigKeys, &config);
 
     static UDPTransportArgs udp_args;
-    udp_args.agent_ip   = config.agent_ip;
-    udp_args.agent_port = config.agent_port;
+    udp_args.agent_ip    = ev3_config_get_string(&config, "agent_ip", "192.168.1.100");
+    udp_args.agent_port  = ev3_config_get_uint16(&config, "agent_port", 8888);
+    const char * service_name = ev3_config_get_string(&config, "service", "/addtwoints");
 
     rmw_uros_set_custom_transport(
         false, &udp_args,
@@ -59,7 +62,7 @@ int main(int argc, char * argv[])
     rclc_service_init_default(
         &service, &node,
         ROSIDL_GET_SRV_TYPE_SUPPORT(example_interfaces, srv, AddTwoInts),
-        config.topic_name
+        service_name
     );
 
     rclc_executor_t executor;
